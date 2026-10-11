@@ -2,7 +2,7 @@ name: Deploy to k3s (home server)
 
 # Push to main (and manual dispatch): tests -> build & push images to GHCR ->
 # helm upgrade on the k3s host. The deploy job runs only when the DEPLOY_HOST
-# repo variable is set (see docs/K8S_DEPLOYMENT.md), so forks just test and build.
+# repo variable is set (see docs/K8S_DEPLOYMENT.md); without it, CI only tests.
 # PRs: tests + chart validation only.
 on:
   push:
@@ -18,7 +18,6 @@ on:
       - 'go.sum'
       - 'Dockerfile'
       - 'deploy/helm/**'
-      - 'deploy/postgres/**'
       - '.github/workflows/deploy-k8s.yml'
   workflow_dispatch:
 
@@ -76,11 +75,12 @@ jobs:
           helm template "$RELEASE" "$CHART_DIR" --set image.tag=ci --set database.inCluster=true \
             --set postgres.backup.s3Uri=s3://ci/backups \
             | kubeconform -strict -summary -kubernetes-version "$K8S_VERSION"
-          kubeconform -strict -summary -kubernetes-version "$K8S_VERSION" deploy/postgres/*.yaml
 
   build:
     needs: [test, chart]
-    if: github.event_name != 'pull_request'
+    # Images are published only where a deploy target is configured, so forks
+    # (and this public repo) never push into a registry someone else deploys from.
+    if: github.event_name != 'pull_request' && vars.DEPLOY_HOST != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -23,7 +23,7 @@ User → Cloudflare (TLS) → cloudflared on the host → localhost:80
 
 1. `test`: `go vet`, `go test -race ./...`
 2. `chart`: `helm lint`, `helm template | kubeconform -strict` (including Gateway API schemas)
-3. `build`: one image per `cmd/<binary>`, `ghcr.io/<owner>/kithly-<binary>:<sha>`, built on GitHub
+3. `build` (only when `DEPLOY_HOST` is set): one image per `cmd/<binary>`, `ghcr.io/<owner>/kithly-<binary>:<sha>`, built on GitHub
    runners with the job's `GITHUB_TOKEN`.
 4. `deploy` (only when the `DEPLOY_HOST` variable is set):
    - GitHub secrets → `kithly-env` Secret and a `ghcr-pull` pull secret, streamed over SSH stdin,
