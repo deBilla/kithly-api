@@ -1,0 +1,38 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - errcheck       # every error must be handled
+    - gosimple       # simplify code
+    - govet          # correctness checks
+    - ineffassign    # detect useless assignments
+    - staticcheck    # comprehensive static analysis
+    - unused         # detect unused code
+    - goimports      # import ordering
+    - misspell       # catch typos in comments/strings
+    - revive         # opinionated Go style guide
+    - noctx          # enforce context passing in HTTP calls
+    - bodyclose      # ensure HTTP response bodies are closed
+    - exhaustive     # ensure switch exhaustiveness on enums
+    - godot          # comments end with a period
+    - gocritic       # various code smell checks
+
+linters-settings:
+  revive:
+    rules:
+      - name: exported
+        arguments:
+          - "checkPrivateReceivers"
+          - "sayRepetitiveInsteadOfStutters"
+  godot:
+    scope: toplevel
+    capital: false
+
+issues:
+  exclude-rules:
+    # Allow fmt.Errorf in test files
+    - path: "_test\\.go"
+      linters:
+        - godot

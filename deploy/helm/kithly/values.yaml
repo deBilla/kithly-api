@@ -1,0 +1,169 @@
+# Images are built per binary by CI: <registry>/<prefix>-<binary>:<tag>.
+image:
+  # CI overrides this with ghcr.io/<repo owner>.
+  registry: ghcr.io/your-github-user
+  prefix: kithly
+  # Commit SHA, set by CI with --set image.tag=<sha>. Required.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# Created by CI (kubectl create secret docker-registry) because the GHCR packages are private.
+imagePullSecrets:
+  - name: ghcr-pull
+
+# Secret holding DATABASE_URL, GEMINI_API_KEY, AWS_*, FIREBASE_*, ADMIN_API_KEY.
+# CI creates it from GitHub secrets; the chart only references it so secret
+# values never pass through helm values or release history.
+envSecretName: kithly-env
+
+# Checksum of the env secret contents, set by CI. Changing it rolls every pod so
+# a rotated secret takes effect without a code change.
+envChecksum: ""
+
+# Non-secret settings shared by every service.
+config: {}
+
+# One entry per cmd/<binary>. Values under env are passed through tpl, so they
+# may reference the release name.
+services:
+  api:
+    binary: api
+    replicas: 1
+    port: 3001
+    env:
+      PORT: "3001"
+    # Internal only — public traffic arrives through the Gateway below.
+    service:
+      type: ClusterIP
+    probe:
+      httpGet: /health
+    terminationGracePeriodSeconds: 30
+    tmpSizeLimit: 1Gi
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { memory: 2Gi }
+
+  worker:
+    binary: worker
+    replicas: 4
+    terminationGracePeriodSeconds: 60
+    # ffmpeg scratch space for card renders.
+    tmpSizeLimit: 10Gi
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { memory: 4Gi }
+
+  transcoder:
+    binary: transcoder
+    replicas: 1
+    terminationGracePeriodSeconds: 60
+    tmpSizeLimit: 10Gi
+    resources:
+      requests: { cpu: 250m, memory: 256Mi }
+      limits: { cpu: "2", memory: 4Gi }
+
+  dashboard:
+    binary: dashboard
+    replicas: 1
+    port: 3002
+    env:
+      DASHBOARD_PORT: "3002"
+    # Bound on host :3002 by ServiceLB, so a tunnel or proxy on the host can
+    # reach it at localhost:3002. Put authentication in front of it: the
+    # dashboard itself has none.
+    service:
+      type: LoadBalancer
+    probe:
+      tcp: true
+    tmpSizeLimit: 256Mi
+    resources:
+      requests: { cpu: 20m, memory: 32Mi }
+      limits: { memory: 512Mi }
+
+  playground:
+    binary: playground
+    replicas: 1
+    port: 3003
+    env:
+      PLAYGROUND_PORT: "3003"
+      API_URL: "http://{{ .Release.Name }}-api:3001"
+    # LAN-only, same host port as Compose (not routed by the tunnel).
+    service:
+      type: LoadBalancer
+    probe:
+      tcp: true
+    tmpSizeLimit: 256Mi
+    resources:
+      requests: { cpu: 20m, memory: 32Mi }
+      limits: { memory: 512Mi }
+
+# Public HTTP routing through the Gateway API. k3s's bundled Traefik implements
+# it (enabled by deploy/k3s/bootstrap.sh) and ServiceLB binds its Service to
+# host :80, which is where the Cloudflare tunnel already sends these hostnames.
+gateway:
+  enabled: true
+  className: traefik
+  # Traefik's "web" entrypoint container port; host :80 maps to it.
+  port: 8000
+  routes:
+    api:
+      service: api
+      hostnames:
+        - api.example.com
+
+# In-cluster Redis for the asynq queues. Persisted (AOF) so queued jobs survive
+# a restart, which the compose setup did not do.
+redis:
+  enabled: true
+  image: redis:7-alpine
+  persistence:
+    size: 2Gi
+    # Empty uses the cluster default (k3s local-path).
+    storageClass: ""
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 512Mi }
+
+# Where the app's DATABASE_URL points.
+#   inCluster: true  -> the in-cluster Postgres below (default).
+#   inCluster: true -> an external database from DATABASE_URL in the kithly-env
+#                       secret. CI sets this from the DB_IN_CLUSTER repo variable.
+database:
+  inCluster: false
+
+# Self-hosted Postgres. Data lives on a local-path PVC under
+# /home/k3s/storage. The password is generated on first install and kept in
+# the <release>-postgres secret (never in values or git).
+postgres:
+  enabled: true
+  image: postgres:17-alpine
+  database: kithly
+  user: kithly
+  storage:
+    size: 20Gi
+    storageClass: ""
+  # Every Go process opens up to 25 conns (internal/core/db), and there are
+  # ~7 processes, so the default of 100 is too low.
+  args:
+    - -c
+    - max_connections=200
+    - -c
+    - shared_buffers=512MB
+    - -c
+    - effective_cache_size=2GB
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { memory: 2Gi }
+
+  # Nightly pg_dump. Always kept on a local PVC (retentionDays); also copied to
+  # S3 when s3Uri is set. Use a dedicated private bucket — NOT the media bucket,
+  # which is served through CloudFront.
+  backup:
+    enabled: true
+    schedule: "30 3 * * *"
+    timeZone: UTC
+    retentionDays: 14
+    # On /home (the large disk), outside k3s's data dir so it survives a cluster rebuild.
+    hostPath: /home/kithly-backups/postgres
+    s3Uri: ""   # e.g. s3://kithly-db-backups/postgres
+    awsCliImage: amazon/aws-cli:2.37.11

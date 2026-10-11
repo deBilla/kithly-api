@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kithly Playground</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: #0f1117; color: #e2e8f0; height: 100vh; display: flex; flex-direction: column; }
+
+  /* Header */
+  header { background: #1a1d2e; border-bottom: 1px solid #2d3050;
+           padding: 0 20px; height: 52px; display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+  header h1 { font-size: 16px; font-weight: 600; color: #a78bfa; }
+  header .pill { font-size: 11px; background: #252840; color: #94a3b8; border-radius: 999px;
+                 padding: 3px 10px; border: 1px solid #2d3050; }
+  .spacer { flex: 1; }
+
+  /* User ID bar */
+  .user-bar { background: #161929; border-bottom: 1px solid #2d3050;
+              padding: 10px 20px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .user-bar label { font-size: 12px; color: #64748b; white-space: nowrap; }
+  .user-bar input { flex: 1; max-width: 360px; background: #1e2235; border: 1px solid #2d3050;
+                    color: #e2e8f0; border-radius: 6px; padding: 6px 10px; font-size: 13px; font-family: monospace; }
+  .user-bar input:focus { outline: none; border-color: #7c3aed; }
+  button { cursor: pointer; border: none; border-radius: 6px; padding: 6px 14px;
+           font-size: 12px; font-weight: 500; transition: opacity .15s; }
+  button:hover { opacity: .85; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-primary   { background: #7c3aed; color: #fff; }
+  .btn-secondary { background: #252840; color: #94a3b8; border: 1px solid #2d3050; }
+  .btn-danger    { background: #7f1d1d; color: #fca5a5; }
+  .btn-warn      { background: #78350f; color: #fcd34d; }
+
+  /* Layout */
+  .layout { display: flex; flex: 1; overflow: hidden; }
+
+  /* Sidebar */
+  .sidebar { width: 280px; flex-shrink: 0; background: #161929;
+             border-right: 1px solid #2d3050; display: flex; flex-direction: column; overflow: hidden; }
+  .sidebar-header { padding: 12px 16px; display: flex; align-items: center; gap: 8px;
+                    border-bottom: 1px solid #2d3050; }
+  .sidebar-header span { font-size: 12px; font-weight: 600; color: #94a3b8;
+                          text-transform: uppercase; letter-spacing: .05em; flex: 1; }
+  .card-list { flex: 1; overflow-y: auto; }
+  .card-item { padding: 12px 16px; border-bottom: 1px solid #1e2235; cursor: pointer; transition: background .1s; }
+  .card-item:hover { background: #1e2235; }
+  .card-item.active { background: #1e2235; border-left: 3px solid #7c3aed; }
+  .card-item .ci-title { font-size: 13px; font-weight: 500; color: #e2e8f0;
+                          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card-item .ci-meta  { font-size: 11px; color: #64748b; margin-top: 3px; display: flex; gap: 8px; }
+  .status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; }
+  .s-ready      { background: #22c55e; }
+  .s-processing { background: #f59e0b; }
+  .s-failed     { background: #ef4444; }
+  .s-draft      { background: #64748b; }
+
+  /* Right panel */
+  .main { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center;
+                 justify-content: center; gap: 8px; color: #475569; }
+  .empty-state .big { font-size: 40px; }
+
+  /* Info sections */
+  .panel { background: #1a1d2e; border: 1px solid #2d3050; border-radius: 10px; padding: 16px; }
+  .panel-title { font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase;
+                 letter-spacing: .06em; margin-bottom: 12px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .field { display: flex; flex-direction: column; gap: 3px; }
+  .field label { font-size: 11px; color: #475569; }
+  .field .val { font-size: 13px; color: #cbd5e1; font-family: monospace; word-break: break-all; }
+  .badge { display: inline-block; font-size: 11px; border-radius: 4px; padding: 2px 8px; font-weight: 500; }
+  .badge-green  { background: #14532d; color: #86efac; }
+  .badge-yellow { background: #78350f; color: #fcd34d; }
+  .badge-red    { background: #7f1d1d; color: #fca5a5; }
+  .badge-gray   { background: #1e293b; color: #64748b; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .divider { border: none; border-top: 1px solid #2d3050; margin: 8px 0; }
+  .span2 { grid-column: span 2; }
+  pre.meta { background: #0f1117; padding: 8px; border-radius: 6px; font-size: 11px; overflow: auto; }
+
+  /* Toast */
+  #toast { position: fixed; bottom: 20px; right: 20px; background: #252840;
+           border: 1px solid #2d3050; border-radius: 8px; padding: 12px 18px;
+           font-size: 13px; color: #e2e8f0; display: none; z-index: 999;
+           max-width: 340px; box-shadow: 0 4px 20px rgba(0,0,0,.4); }
+  #toast.err { border-color: #7f1d1d; background: #1c0f0f; color: #fca5a5; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2d3050; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Kithly Playground</h1>
+  <span class="pill">video job tools</span>
+  <div class="spacer"></div>
+  <span class="pill">proxy → /proxy/...</span>
+</header>
+
+<div class="user-bar">
+  <label>Guest token</label>
+  <input id="user-id" type="text" placeholder="token from POST /v1/user/guest" spellcheck="false">
+  <button class="btn-primary" id="btn-load-cards">Load Cards</button>
+</div>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <span>Cards</span>
+      <button class="btn-secondary" id="btn-refresh-sidebar" style="padding:3px 8px;font-size:11px;">&#8635;</button>
+    </div>
+    <div class="card-list" id="card-list">
+      <div style="padding:20px 16px;font-size:12px;color:#475569;">Load cards to begin.</div>
+    </div>
+  </div>
+
+  <div class="main" id="main">
+    <div class="empty-state">
+      <div class="big">&#127916;</div>
+      <div>Select a card from the sidebar</div>
+      <div style="font-size:12px;">or open one directly by ID</div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <input id="direct-id"
+               style="background:#1e2235;border:1px solid #2d3050;color:#e2e8f0;border-radius:6px;
+                      padding:6px 10px;font-size:13px;font-family:monospace;width:300px;"
+               placeholder="card UUID">
+        <button class="btn-secondary" id="btn-open-direct">Open</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// State
+var activeCardId = null;
+var pollTimer = null;
+
+// Persistence
+var uidInput = document.getElementById('user-id');
+uidInput.value = localStorage.getItem('pg_guest_token') || '';
+uidInput.addEventListener('input', function() {
+  localStorage.setItem('pg_guest_token', uidInput.value.trim());
+});
+
+// Wire up buttons
+document.getElementById('btn-load-cards').addEventListener('click', loadCards);
+document.getElementById('btn-refresh-sidebar').addEventListener('click', loadCards);
+document.getElementById('btn-open-direct').addEventListener('click', function() {
+  var id = document.getElementById('direct-id').value.trim();
+  if (id) loadCard(id);
+});
+
+// API helper
+function uid() { return uidInput.value.trim(); }
+
+function api(method, path, body, callback) {
+  var headers = { 'Content-Type': 'application/json' };
+  var u = uid();
+  if (u) headers['X-Guest-Token'] = u;
+  var opts = { method: method, headers: headers };
+  if (body) opts.body = JSON.stringify(body);
+  fetch('/proxy' + path, opts).then(function(res) {
+    res.text().then(function(text) {
+      var data;
+      try { data = JSON.parse(text); } catch(e) { data = { raw: text }; }
+      callback(res.ok, res.status, data);
+    });
+  }).catch(function(err) {
+    callback(false, 0, { raw: String(err) });
+  });
+}
+
+// Toast
+var toastTimer;
+function toast(msg, isErr) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = isErr ? 'err' : '';
+  el.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function() { el.style.display = 'none'; }, 3500);
+}
+
+// Helpers
+function statusBadge(s) {
+  var map = { ready:'badge-green', processing:'badge-yellow', failed:'badge-red',
+              completed:'badge-green', pending:'badge-yellow', draft:'badge-gray' };
+  var cls = map[s] || 'badge-gray';
+  return '<span class="badge ' + cls + '">' + esc(s || '—') + '</span>';
+}
+function dotClass(s) {
+  if (s === 'ready' || s === 'completed') return 's-ready';
+  if (s === 'processing' || s === 'pending') return 's-processing';
+  if (s === 'failed') return 's-failed';
+  return 's-draft';
+}
+function esc(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function errMsg(data) {
+  if (!data) return 'unknown error';
+  if (data.error) return data.error.message || JSON.stringify(data.error);
+  if (data.raw) return data.raw.slice(0, 200);
+  return JSON.stringify(data).slice(0, 200);
+}
+function renderMain(html) { document.getElementById('main').innerHTML = html; }
+
+// Load card list
+function loadCards() {
+  if (!uid()) { toast('Enter a User ID first', true); return; }
+  var list = document.getElementById('card-list');
+  list.innerHTML = '<div style="padding:16px;font-size:12px;color:#64748b;">Loading...</div>';
+  api('GET', '/v1/video-card/dashboard?limit=50&page=1', null, function(ok, status, data) {
+    if (!ok) {
+      list.innerHTML = '<div style="padding:16px;font-size:12px;color:#fca5a5;">Error: ' + esc(errMsg(data)) + '</div>';
+      return;
+    }
+    var cards = (data.data) || [];
+    if (!cards.length) {
+      list.innerHTML = '<div style="padding:16px;font-size:12px;color:#64748b;">No cards found.</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < cards.length; i++) {
+      var c = cards[i];
+      var active = c.id === activeCardId ? ' active' : '';
+      html += '<div class="card-item' + active + '" id="ci-' + esc(c.id) + '" data-id="' + esc(c.id) + '">'
+            + '<div class="ci-title">' + esc(c.title || 'Untitled') + '</div>'
+            + '<div class="ci-meta"><span><span class="status-dot ' + dotClass(c.status) + '"></span> ' + esc(c.status) + '</span>'
+            + '<span>' + esc(c.occasion || '') + '</span></div>'
+            + '</div>';
+    }
+    list.innerHTML = html;
+    list.querySelectorAll('.card-item').forEach(function(el) {
+      el.addEventListener('click', function() { loadCard(this.getAttribute('data-id')); });
+    });
+  });
+}
+
+// Load card detail + latest job
+function loadCard(id) {
+  if (!id) return;
+  if (!uid()) { toast('Enter a User ID first', true); return; }
+  activeCardId = id;
+
+  // Update sidebar highlight
+  document.querySelectorAll('.card-item').forEach(function(el) { el.classList.remove('active'); });
+  var ci = document.getElementById('ci-' + id);
+  if (ci) ci.classList.add('active');
+
+  stopPoll();
+  renderMain('<div style="color:#64748b;font-size:13px;padding:20px;">Loading...</div>');
+
+  // Fetch card and job in parallel
+  var cardDone = false, jobDone = false;
+  var cardResult = null, jobResult = null;
+
+  function tryRender() {
+    if (cardDone && jobDone) renderCardAndJob(cardResult, jobResult, id);
+  }
+
+  api('GET', '/v1/video-card/' + id + '/full-details', null, function(ok, status, data) {
+    cardResult = { ok: ok, data: data };
+    cardDone = true;
+    tryRender();
+  });
+  api('GET', '/v1/video-processing-job/latest?video_card_id=' + id, null, function(ok, status, data) {
+    jobResult = { ok: ok, data: data };
+    jobDone = true;
+    tryRender();
+  });
+}
+
+function renderCardAndJob(cardRes, jobRes, id) {
+  var c = cardRes.ok ? (cardRes.data.data || {}) : null;
+  var j = jobRes.ok ? (jobRes.data.data || null) : null;
+
+  if (!c) {
+    renderMain('<div class="panel"><p style="color:#fca5a5;font-size:13px;">Failed to load card: ' + esc(errMsg(cardRes.data)) + '</p></div>');
+    return;
+  }
+
+  var previewField = c.preview_url
+    ? '<div class="field span2"><label>Preview URL</label><div class="val"><a href="' + esc(c.preview_url) + '" target="_blank" style="color:#a78bfa;">' + esc(c.preview_url) + '</a></div></div>'
+    : '';
+  var finalField = c.final_video_url
+    ? '<div class="field span2"><label>Final Video URL</label><div class="val"><a href="' + esc(c.final_video_url) + '" target="_blank" style="color:#a78bfa;">' + esc(c.final_video_url) + '</a></div></div>'
+    : '';
+
+  var html = '<div class="panel">'
+    + '<div class="panel-title">Video Card</div>'
+    + '<div class="grid2">'
+    + '<div class="field"><label>ID</label><div class="val">' + esc(c.id) + '</div></div>'
+    + '<div class="field"><label>Status</label><div class="val">' + statusBadge(c.status) + '</div></div>'
+    + '<div class="field"><label>Title</label><div class="val">' + esc(c.title) + '</div></div>'
+    + '<div class="field"><label>Occasion</label><div class="val">' + esc(c.occasion) + '</div></div>'
+    + '<div class="field"><label>Max Contributors</label><div class="val">' + (c.max_contributors || '—') + '</div></div>'
+    + '<div class="field"><label>Is Locked</label><div class="val">' + (c.is_locked ? 'Yes' : 'No') + '</div></div>'
+    + '<div class="field span2"><label>Share Token</label><div class="val">' + esc(c.share_token) + '</div></div>'
+    + previewField + finalField
+    + '</div>'
+    + '<hr class="divider">'
+    + '<div class="actions">'
+    + '<button class="btn-warn" id="btn-finalize">&#9889; Finalize</button>'
+    + '<button class="btn-secondary" id="btn-preview">&#128065; Generate Preview</button>'
+    + '<button class="btn-secondary" id="btn-refresh-card">&#8635; Refresh</button>'
+    + '</div>'
+    + '</div>'
+    + '<div class="panel" id="job-panel">'
+    + '<div class="panel-title">Latest Processing Job</div>'
+    + renderJob(j)
+    + '</div>';
+
+  renderMain(html);
+
+  document.getElementById('btn-finalize').addEventListener('click', function() { doFinalize(id); });
+  document.getElementById('btn-preview').addEventListener('click', function() { doPreview(id); });
+  document.getElementById('btn-refresh-card').addEventListener('click', function() { loadCard(id); });
+
+  startPoll(id);
+}
+
+function renderJob(j) {
+  if (!j) return '<p style="font-size:13px;color:#64748b;">No processing jobs found for this card.</p>';
+  var meta = j.metadata ? JSON.stringify(j.metadata, null, 2) : '—';
+  var errorField = j.error_message
+    ? '<div class="field span2"><label>Error</label><div class="val" style="color:#fca5a5;">' + esc(j.error_message) + '</div></div>'
+    : '';
+  var retryBtn = j.status === 'failed'
+    ? '<button class="btn-danger" id="btn-retry">&#8634; Retry Job</button>'
+    : '';
+  var created = j.created_at ? new Date(j.created_at).toLocaleString() : '—';
+
+  return '<div class="grid2">'
+    + '<div class="field"><label>Job ID</label><div class="val">' + esc(j.id) + '</div></div>'
+    + '<div class="field"><label>Status</label><div class="val">' + statusBadge(j.status) + '</div></div>'
+    + '<div class="field"><label>Attempts</label><div class="val">' + j.attempts + '</div></div>'
+    + '<div class="field"><label>Created</label><div class="val">' + esc(created) + '</div></div>'
+    + errorField
+    + '<div class="field span2"><label>Metadata</label><pre class="meta">' + esc(meta) + '</pre></div>'
+    + '</div>'
+    + '<hr class="divider">'
+    + '<div class="actions">' + retryBtn + '</div>';
+}
+
+// Actions
+function doFinalize(id) {
+  if (!confirm('Finalize card ' + id + '?\nThis queues the final video processing job.')) return;
+  api('POST', '/v1/video-card/' + id + '/finalize', null, function(ok, status, data) {
+    if (ok) { toast('Finalisation queued'); setTimeout(function() { loadCard(id); }, 1000); }
+    else toast('Finalize failed: ' + errMsg(data), true);
+  });
+}
+
+function doPreview(id) {
+  api('POST', '/v1/video-card/' + id + '/preview', null, function(ok, status, data) {
+    if (ok) { toast('Preview generation queued'); setTimeout(function() { loadCard(id); }, 1000); }
+    else toast('Preview failed: ' + errMsg(data), true);
+  });
+}
+
+function doRetry(jobId) {
+  api('POST', '/v1/video-processing-job/retry/' + jobId, null, function(ok, status, data) {
+    if (ok) { toast('Retry queued'); setTimeout(function() { loadCard(activeCardId); }, 1000); }
+    else toast('Retry failed: ' + errMsg(data), true);
+  });
+}
+
+// Auto-refresh job panel every 5s while a card is open
+function startPoll(cardId) {
+  stopPoll();
+  pollTimer = setInterval(function() {
+    if (activeCardId !== cardId) { stopPoll(); return; }
+    api('GET', '/v1/video-processing-job/latest?video_card_id=' + cardId, null, function(ok, status, data) {
+      var panel = document.getElementById('job-panel');
+      if (!panel) return;
+      var j = ok ? (data.data || null) : null;
+      panel.innerHTML = '<div class="panel-title">Latest Processing Job <span style="font-size:10px;color:#475569;">(live)</span></div>'
+                      + renderJob(j);
+      // Re-wire retry button if it appeared
+      var retryBtn = document.getElementById('btn-retry');
+      if (retryBtn && j) {
+        retryBtn.addEventListener('click', function() { doRetry(j.id); });
+      }
+    });
+  }, 5000);
+}
+function stopPoll() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+</script>
+</body>
+</html>

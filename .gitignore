@@ -1,0 +1,12 @@
+bin/
+.env
+.env.*
+*.out
+*.test
+
+# compiled binaries at repo root
+/api
+/worker
+/dashboard
+/playground
+!.env.example

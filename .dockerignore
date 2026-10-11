@@ -1,0 +1,17 @@
+# Keep the build context to Go sources. Notably excludes .env: the compose
+# deploy writes it next to the Dockerfile, and `COPY . .` would bake it into images.
+.git
+.github
+.env
+.env.*
+bin/
+deploy/
+docs/
+tests/
+*.out
+*.test
+/api
+/worker
+/dashboard
+/playground
+/transcoder

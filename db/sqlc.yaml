@@ -1,0 +1,22 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries:
+      - "./queries/users.sql"
+      - "./queries/cards.sql"
+      - "./queries/contributions.sql"
+      - "./queries/processing_jobs.sql"
+      - "./queries/transcoding_jobs.sql"
+      - "./queries/music_themes.sql"
+      - "./queries/video_overlays.sql"
+      - "./queries/occasions.sql"
+    schema: "./schema.sql"
+    gen:
+      go:
+        package: "sqlcdb"
+        out: "../internal/core/sqlcdb"
+        emit_json_tags: true
+        emit_interface: true
+        emit_exact_table_names: false
+        json_tags_case_style: "snake"
+        sql_package: "pgx/v5"

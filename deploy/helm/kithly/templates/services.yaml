@@ -1,0 +1,133 @@
+{{- $tag := required "image.tag is required (CI passes the commit SHA)" .Values.image.tag -}}
+{{- if and .Values.database.inCluster (not .Values.postgres.enabled) }}
+{{- fail "database.inCluster=true requires postgres.enabled=true" }}
+{{- end }}
+{{- range $name, $svc := .Values.services }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $.Release.Name }}-{{ $name }}
+  labels:
+    {{- include "kithly.labels" $ | nindent 4 }}
+    {{- include "kithly.selectorLabels" (dict "root" $ "name" $name) | nindent 4 }}
+spec:
+  replicas: {{ $svc.replicas }}
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Bring the new pod up before taking the old one down.
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "kithly.selectorLabels" (dict "root" $ "name" $name) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kithly.labels" $ | nindent 8 }}
+        {{- include "kithly.selectorLabels" (dict "root" $ "name" $name) | nindent 8 }}
+      annotations:
+        kithly.app/env-checksum: {{ $.Values.envChecksum | quote }}
+    spec:
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ $svc.terminationGracePeriodSeconds | default 30 }}
+      containers:
+        - name: {{ $name }}
+          image: "{{ $.Values.image.registry }}/{{ $.Values.image.prefix }}-{{ $svc.binary }}:{{ $tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          {{- if $svc.port }}
+          ports:
+            - name: http
+              containerPort: {{ $svc.port }}
+          {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ $.Values.envSecretName }}
+          # Explicit env wins over envFrom, so REDIS_HOST always points at the in-cluster Redis.
+          env:
+            - name: REDIS_HOST
+              value: {{ include "kithly.redisHost" $ | quote }}
+            - name: REDIS_PORT
+              value: "6379"
+            {{- if $.Values.database.inCluster }}
+            # Overrides any external DATABASE_URL from envFrom. Direct connection,
+            # no PgBouncer params; $(POSTGRES_PASSWORD) is expanded by the kubelet.
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Release.Name }}-postgres
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://{{ $.Values.postgres.user }}:$(POSTGRES_PASSWORD)@{{ $.Release.Name }}-postgres:5432/{{ $.Values.postgres.database }}?sslmode=disable"
+            {{- end }}
+            {{- range $k, $v := $.Values.config }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+            {{- range $k, $v := $svc.env }}
+            - name: {{ $k }}
+              value: {{ tpl $v $ | quote }}
+            {{- end }}
+          {{- with $svc.probe }}
+          readinessProbe:
+            {{- if .httpGet }}
+            httpGet:
+              path: {{ .httpGet }}
+              port: http
+            {{- else }}
+            tcpSocket:
+              port: http
+            {{- end }}
+            periodSeconds: 10
+          livenessProbe:
+            {{- if .httpGet }}
+            httpGet:
+              path: {{ .httpGet }}
+              port: http
+            {{- else }}
+            tcpSocket:
+              port: http
+            {{- end }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+          resources:
+            {{- toYaml $svc.resources | nindent 12 }}
+          volumeMounts:
+            # os.MkdirTemp scratch (ffmpeg intermediates) — bounded so a runaway
+            # render evicts its own pod instead of filling the node's disk.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: {{ $svc.tmpSizeLimit | default "1Gi" }}
+{{- if $svc.service }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $.Release.Name }}-{{ $name }}
+  labels:
+    {{- include "kithly.labels" $ | nindent 4 }}
+spec:
+  type: {{ $svc.service.type | default "ClusterIP" }}
+  selector:
+    {{- include "kithly.selectorLabels" (dict "root" $ "name" $name) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $svc.port }}
+      targetPort: http
+      {{- if and (eq ($svc.service.type | default "ClusterIP") "NodePort") $svc.service.nodePort }}
+      nodePort: {{ $svc.service.nodePort }}
+      {{- end }}
+{{- end }}
+{{- end }}

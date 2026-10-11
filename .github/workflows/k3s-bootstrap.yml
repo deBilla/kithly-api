@@ -1,0 +1,49 @@
+name: Bootstrap k3s (home server)
+
+# One-off / occasional: installs or upgrades k3s + Helm on the home server.
+# Safe to re-run — see deploy/k3s/bootstrap.sh. Manual only, never on push.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "bootstrap" to confirm changes to the host'
+        required: true
+
+concurrency:
+  group: k3s-host
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    if: inputs.confirm == 'bootstrap' && vars.DEPLOY_HOST != ''
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      # Node's LAN IP (pinned so k3s never picks another interface) and the
+      # upstream DNS server for CoreDNS.
+      NODE_IP: ${{ vars.NODE_IP }}
+      UPSTREAM_DNS: ${{ vars.UPSTREAM_DNS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cloudflared
+        run: |
+          curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
+          sudo dpkg -i cloudflared.deb
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
+
+      - name: Add SSH config and known hosts
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          echo "${{ secrets.SSH_CONFIG }}" >> ~/.ssh/config
+
+      - name: Run bootstrap
+        run: |
+          # shellcheck disable=SC2029
+          ssh "$DEPLOY_HOST" "NODE_IP='$NODE_IP' UPSTREAM_DNS='$UPSTREAM_DNS' bash -s" < deploy/k3s/bootstrap.sh

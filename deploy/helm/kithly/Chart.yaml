@@ -1,0 +1,6 @@
+apiVersion: v2
+name: kithly
+description: Kithly API, queue workers, transcoder and tooling on a single-node k3s cluster.
+type: application
+# Chart version — bump when templates change. The app version is the image tag CI passes in.
+version: 0.3.1
